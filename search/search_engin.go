@@ -15,8 +15,8 @@ type IndexedItem[T any] struct {
 	Value T
 }
 
-// Search  returns filtered items with their original indices
-func Search[T any](slice []T, criteria Criteria[T]) []IndexedItem[T] {
+// Find returns filtered items with their original indices
+func Find[T any](slice []T, criteria Criteria[T]) []IndexedItem[T] {
 	var results []IndexedItem[T]
 	for i, item := range slice {
 		if criteria(item) {
