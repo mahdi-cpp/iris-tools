@@ -177,7 +177,7 @@ func ApplyCollectionUpdateByID[T any, K comparable](
 
 // NestedFieldUpdate defines a nested struct update operation
 type NestedFieldUpdate[T any] struct {
-	ID    int
+	ID    string // Changed from int to string
 	Field string
 	Value interface{}
 }
@@ -186,10 +186,10 @@ type NestedFieldUpdate[T any] struct {
 func ApplyNestedUpdate[T any](
 	slice []T,
 	updates []NestedFieldUpdate[T],
-	keyExtractor KeyExtractor[T, int],
+	keyExtractor KeyExtractor[T, string], // Updated to use string key
 ) []T {
 	// Create ID->index map
-	idToIndex := make(map[int]int)
+	idToIndex := make(map[string]int) // Changed to string key
 	for i, item := range slice {
 		id := keyExtractor(item)
 		idToIndex[id] = i
