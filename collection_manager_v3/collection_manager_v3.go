@@ -1,4 +1,4 @@
-package collection_manager_uuid7
+package collection_manager_v3
 
 import (
 	"errors"
@@ -78,7 +78,7 @@ func (s *singleFileStorage[T]) DeleteItem(id string) error {
 	if err != nil {
 		return err
 	}
-	newItems := []T{}
+	var newItems []T
 	for _, item := range items {
 		if item.GetID() != id {
 			newItems = append(newItems, item)
@@ -125,6 +125,7 @@ func (d *directoryStorage[T]) ReadAll(requireExist bool) ([]T, error) {
 		id := strings.TrimSuffix(filename, filepath.Ext(filename))
 		item, err := d.readItem(id)
 		if err != nil {
+			fmt.Println("collection_manager_v3:", err.Error())
 			continue
 		}
 		items = append(items, item)

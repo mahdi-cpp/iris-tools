@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// defines a filter function for type T
-type SearchCriteria[T any] func(T) bool
+// Criteria defines a filter function for type T
+type Criteria[T any] func(T) bool
 
 // IndexedItem holds original index and value of matched items
 type IndexedItem[T any] struct {
@@ -15,8 +15,8 @@ type IndexedItem[T any] struct {
 	Value T
 }
 
-// search returns filtered items with their original indices
-func Search[T any](slice []T, criteria SearchCriteria[T]) []IndexedItem[T] {
+// Search  returns filtered items with their original indices
+func Search[T any](slice []T, criteria Criteria[T]) []IndexedItem[T] {
 	var results []IndexedItem[T]
 	for i, item := range slice {
 		if criteria(item) {
