@@ -1,6 +1,10 @@
 package update
 
-import "reflect"
+import (
+	"reflect"
+
+	"github.com/google/uuid"
+)
 
 // CollectionUpdateOp defines operations for slice fields
 //type CollectionUpdateOp[T comparable] struct {
@@ -177,19 +181,18 @@ func ApplyCollectionUpdateByID[T any, K comparable](
 
 // NestedFieldUpdate defines a nested struct update operation
 type NestedFieldUpdate[T any] struct {
-	ID    string // Changed from int to string
+	ID    uuid.UUID // Changed from int to string
 	Field string
 	Value interface{}
 }
 
 // ApplyNestedUpdate updates specific fields in nested structs
-func ApplyNestedUpdate[T any](
-	slice []T,
-	updates []NestedFieldUpdate[T],
-	keyExtractor KeyExtractor[T, string], // Updated to use string key
-) []T {
+// Updated to use string key
+func ApplyNestedUpdate[T any](slice []T, updates []NestedFieldUpdate[T], keyExtractor KeyExtractor[T, uuid.UUID]) []T {
+
 	// Create ID->index map
-	idToIndex := make(map[string]int) // Changed to string key
+	idToIndex := make(map[uuid.UUID]int) // Changed to string key
+
 	for i, item := range slice {
 		id := keyExtractor(item)
 		idToIndex[id] = i
