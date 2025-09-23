@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/google/uuid"
@@ -26,6 +27,8 @@ const (
 
 type collectionItem interface {
 	SetID(uuid.UUID)
+	SetCreatedAt(t time.Time)
+	SetUpdatedAt(t time.Time)
 	GetID() uuid.UUID
 	GetRecordSize() int
 }
@@ -539,6 +542,7 @@ func (m *Manager[T, I]) Create(item T) (T, error) {
 		return zero, fmt.Errorf("error generating UUID v7: %w", err)
 	}
 	item.SetID(id)
+	item.SetCreatedAt(time.Now())
 
 	data, err := json.Marshal(item)
 	if err != nil {
@@ -580,6 +584,8 @@ func (m *Manager[T, I]) Create(item T) (T, error) {
 func (m *Manager[T, I]) Update(item T) (T, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	item.SetUpdatedAt(time.Now())
 
 	var zero T
 	id := item.GetID()
