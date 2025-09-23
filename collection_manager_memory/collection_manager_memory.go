@@ -23,7 +23,7 @@ const (
 	StatusDeleted = 0x01
 )
 
-type collectionItem interface {
+type CollectionItem interface {
 	SetID(uuid.UUID)
 	SetCreatedAt(t time.Time)
 	SetUpdatedAt(t time.Time)
