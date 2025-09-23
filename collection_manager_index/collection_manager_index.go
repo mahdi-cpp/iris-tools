@@ -543,6 +543,7 @@ func (m *Manager[T, I]) Create(item T) (T, error) {
 	}
 	item.SetID(id)
 	item.SetCreatedAt(time.Now())
+	item.SetUpdatedAt(time.Now())
 
 	data, err := json.Marshal(item)
 	if err != nil {
