@@ -152,7 +152,7 @@ func (h *FileHandler) DeleteRecord(offset int64) error {
 }
 
 // Manager جدید با قابلیت کشینگ در رم
-type Manager[T collectionItem] struct {
+type Manager[T CollectionItem] struct {
 	fh        *FileHandler
 	mu        sync.RWMutex
 	dataCache map[uuid.UUID]T // کش برای ذخیره تمام آیتم‌ها در رم
@@ -160,7 +160,7 @@ type Manager[T collectionItem] struct {
 }
 
 // New Manager را با خواندن تمام داده‌ها از فایل و کش کردن آنها در رم مقداردهی می‌کند.
-func New[T collectionItem](dirName string) (*Manager[T], error) {
+func New[T CollectionItem](dirName string) (*Manager[T], error) {
 	var dataItem T
 	recordSize := dataItem.GetRecordSize()
 
