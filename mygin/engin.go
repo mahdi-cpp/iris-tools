@@ -303,7 +303,7 @@ func (c *Context) reset() {
 }
 
 func (c *Context) GetHeader(h string) string {
-	return ""
+	return c.Request.Header.Get(h)
 }
 
 // Run starts the HTTP server
