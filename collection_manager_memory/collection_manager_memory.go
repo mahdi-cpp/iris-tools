@@ -39,13 +39,13 @@ type FileHandler struct {
 	recordSize int
 }
 
-func NewFileHandler(dirName string, recordSize int) (*FileHandler, error) {
+func NewFileHandler(dirName string, fileName string, recordSize int) (*FileHandler, error) {
 
 	if err := os.MkdirAll(dirName, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("error creating directory %s: %w", dirName, err)
 	}
 
-	dataFileName := filepath.Join(dirName, "data.db")
+	dataFileName := filepath.Join(dirName, fileName+".db")
 
 	dataFile, err := os.OpenFile(dataFileName, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
@@ -160,11 +160,11 @@ type Manager[T CollectionItem] struct {
 }
 
 // New Manager را با خواندن تمام داده‌ها از فایل و کش کردن آنها در رم مقداردهی می‌کند.
-func New[T CollectionItem](dirName string) (*Manager[T], error) {
+func New[T CollectionItem](dirName string, fileName string) (*Manager[T], error) {
 	var dataItem T
 	recordSize := dataItem.GetRecordSize()
 
-	fh, err := NewFileHandler(dirName, recordSize)
+	fh, err := NewFileHandler(dirName, fileName, recordSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file handler: %w", err)
 	}
