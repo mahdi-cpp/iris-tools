@@ -23,12 +23,17 @@ const (
 	StatusDeleted = 0x01
 )
 
+// CollectionItem فقط متدهای اجباری را شامل می‌شود.
 type CollectionItem interface {
 	SetID(uuid.UUID)
-	SetCreatedAt(t time.Time)
-	SetUpdatedAt(t time.Time)
 	GetID() uuid.UUID
 	GetRecordSize() int
+}
+
+// Timestampable یک اینترفیس برای آیتم‌هایی است که قابلیت زمان‌بندی دارند.
+type Timestampable interface {
+	SetCreatedAt(t time.Time)
+	SetUpdatedAt(t time.Time)
 }
 
 // FileHandler همان ساختار قبلی را حفظ می‌کند
@@ -243,8 +248,12 @@ func (m *Manager[T]) Create(item T) (T, error) {
 		return zero, fmt.Errorf("error generating UUID v7: %w", err)
 	}
 	item.SetID(id)
-	item.SetCreatedAt(time.Now())
-	item.SetUpdatedAt(time.Now())
+
+	if tsItem, ok := any(item).(Timestampable); ok {
+		now := time.Now()
+		tsItem.SetCreatedAt(now)
+		tsItem.SetUpdatedAt(now)
+	}
 
 	data, err := json.Marshal(item)
 	if err != nil {
@@ -290,7 +299,10 @@ func (m *Manager[T]) Update(item T) (T, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	item.SetUpdatedAt(time.Now())
+	if tsItem, ok := any(item).(Timestampable); ok {
+		now := time.Now()
+		tsItem.SetUpdatedAt(now)
+	}
 
 	var zero T
 	id := item.GetID()
