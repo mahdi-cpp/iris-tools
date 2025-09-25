@@ -27,7 +27,6 @@ func (a *PhotoAlbums) GetID() uuid.UUID   { return a.ID }
 func (a *PhotoAlbums) GetRecordSize() int { return 150 }
 
 type PhotoAlbums struct {
-	ID      uuid.UUID `json:"id"`
 	AlbumID uuid.UUID `json:"albumId"`
 	PhotoID uuid.UUID `json:"photoID"`
 }
