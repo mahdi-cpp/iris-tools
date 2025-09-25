@@ -7,9 +7,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/goccy/go-json"
+	"github.com/google/uuid"
 )
 
 const (
@@ -27,7 +30,12 @@ type JoinItem interface {
 	GetRecordSize() int
 }
 
-// FileHandler همان FileHandler قبلی است.
+// Timestampable یک اینترفیس برای آیتم‌هایی است که قابلیت زمان‌بندی دارند.
+type Timestampable interface {
+	SetCreatedAt(t time.Time)
+	SetUpdatedAt(t time.Time)
+}
+
 type FileHandler struct {
 	dataFile   *os.File
 	mu         sync.RWMutex
@@ -148,10 +156,11 @@ func (h *FileHandler) DeleteRecord(offset int64) error {
 
 // Manager برای مدیریت آیتم‌های دارای کلید ترکیبی.
 type Manager[T JoinItem] struct {
-	fh        *FileHandler
-	mu        sync.RWMutex
-	dataCache map[string]T // کش برای ذخیره تمام آیتم‌ها در رم با کلید ترکیبی
-	closed    bool
+	fh          *FileHandler
+	mu          sync.RWMutex
+	dataCache   map[string]T   // کش اصلی برای کلید ترکیبی
+	parentCache map[string][]T // کش جدید برای parentID
+	closed      bool
 }
 
 func New[T JoinItem](dirName string, fileName string) (*Manager[T], error) {
@@ -164,8 +173,9 @@ func New[T JoinItem](dirName string, fileName string) (*Manager[T], error) {
 	}
 
 	manager := &Manager[T]{
-		fh:        fh,
-		dataCache: make(map[string]T),
+		fh:          fh,
+		dataCache:   make(map[string]T),
+		parentCache: make(map[string][]T),
 	}
 
 	if err := manager.loadAllDataToCache(); err != nil {
@@ -198,6 +208,13 @@ func (m *Manager[T]) loadAllDataToCache() error {
 		}
 
 		m.dataCache[loadedItem.GetCompositeKey()] = loadedItem
+
+		// پر کردن کش جدید
+		keyParts := strings.Split(loadedItem.GetCompositeKey(), ":")
+		if len(keyParts) > 0 {
+			parentID := keyParts[0]
+			m.parentCache[parentID] = append(m.parentCache[parentID], loadedItem)
+		}
 	}
 	log.Printf("Loaded %d items into cache from data.db", len(m.dataCache))
 	return nil
@@ -213,11 +230,11 @@ func (m *Manager[T]) Close() error {
 	m.closed = true
 
 	m.dataCache = nil
+	m.parentCache = nil
 
 	return m.fh.Close()
 }
 
-// Create یک آیتم جدید را به کش اضافه کرده و در فایل می‌نویسد.
 func (m *Manager[T]) Create(item T) (T, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -232,6 +249,13 @@ func (m *Manager[T]) Create(item T) (T, error) {
 		return zero, fmt.Errorf("item with key %s already exists", key)
 	}
 
+	// مدیریت زمان‌بندی در صورت وجود اینترفیس Timestampable
+	if tsItem, ok := any(item).(Timestampable); ok {
+		now := time.Now()
+		tsItem.SetCreatedAt(now)
+		tsItem.SetUpdatedAt(now)
+	}
+
 	data, err := json.Marshal(item)
 	if err != nil {
 		return zero, fmt.Errorf("error marshaling item: %w", err)
@@ -244,10 +268,16 @@ func (m *Manager[T]) Create(item T) (T, error) {
 
 	m.dataCache[key] = item
 
+	// به‌روزرسانی کش والد
+	keyParts := strings.Split(key, ":")
+	if len(keyParts) > 0 {
+		parentID := keyParts[0]
+		m.parentCache[parentID] = append(m.parentCache[parentID], item)
+	}
+
 	return item, nil
 }
 
-// Read یک آیتم را از کش برمی‌گرداند.
 func (m *Manager[T]) Read(key string) (T, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -271,7 +301,6 @@ func (m *Manager[T]) ReadAll() ([]T, error) {
 	return items, nil
 }
 
-// Update یک آیتم را در کش و فایل به‌روزرسانی می‌کند.
 func (m *Manager[T]) Update(item T) (T, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -280,6 +309,11 @@ func (m *Manager[T]) Update(item T) (T, error) {
 	key := item.GetCompositeKey()
 	if _, ok := m.dataCache[key]; !ok {
 		return zero, fmt.Errorf("item with key %s does not exist", key)
+	}
+
+	// مدیریت زمان‌بندی
+	if tsItem, ok := any(item).(Timestampable); ok {
+		tsItem.SetUpdatedAt(time.Now())
 	}
 
 	offset, err := m.findRecordOffset(key)
@@ -301,12 +335,12 @@ func (m *Manager[T]) Update(item T) (T, error) {
 	return item, nil
 }
 
-// Delete یک آیتم را از کش و فایل حذف می‌کند.
 func (m *Manager[T]) Delete(key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, ok := m.dataCache[key]; !ok {
+	_, ok := m.dataCache[key]
+	if !ok {
 		return fmt.Errorf("item with key %s not found", key)
 	}
 
@@ -321,6 +355,19 @@ func (m *Manager[T]) Delete(key string) error {
 
 	delete(m.dataCache, key)
 
+	// به‌روزرسانی کش والد
+	keyParts := strings.Split(key, ":")
+	if len(keyParts) > 0 {
+		parentID := keyParts[0]
+		items := m.parentCache[parentID]
+		for i, v := range items {
+			if v.GetCompositeKey() == key {
+				m.parentCache[parentID] = append(items[:i], items[i+1:]...)
+				break
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -330,7 +377,6 @@ func (m *Manager[T]) Count() int {
 	return len(m.dataCache)
 }
 
-// findRecordOffset به صورت خطی در فایل برای پیدا کردن آفست جستجو می‌کند.
 func (m *Manager[T]) findRecordOffset(key string) (int64, error) {
 	fileInfo, err := m.fh.dataFile.Stat()
 	if err != nil {
@@ -356,4 +402,19 @@ func (m *Manager[T]) findRecordOffset(key string) (int64, error) {
 	}
 
 	return -1, fmt.Errorf("item with key %s not found", key)
+}
+
+// GetByParentID تمام آیتم‌های مربوط به یک کلید والد را برمی‌گرداند.
+func (m *Manager[T]) GetByParentID(parentID uuid.UUID) ([]T, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	parentIDStr := parentID.String()
+
+	items, ok := m.parentCache[parentIDStr]
+	if !ok || len(items) == 0 {
+		return nil, fmt.Errorf("no items found for parent ID: %s", parentIDStr)
+	}
+
+	return items, nil
 }
