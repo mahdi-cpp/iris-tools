@@ -2,6 +2,7 @@ package mygin
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -87,7 +88,7 @@ func (group *RouterGroup) handle(httpMethod, relativePath string, handlers Handl
 	group.engine.addRoute(httpMethod, absolutePath, handlers)
 }
 
-// addRoute adds a route to the engine's Radix Tree.
+// addRoute adds a route to the engine's Radix Tree and logs the registration.
 func (engine *Engine) addRoute(method, path string, handlers HandlersChain) {
 	if method == "" {
 		panic("method must not be empty")
@@ -106,7 +107,6 @@ func (engine *Engine) addRoute(method, path string, handlers HandlersChain) {
 	// 💡 به‌روزرسانی برای نمایش مسیر در ترمینال (مشابه Gin)
 	// =========================================================
 
-	// تعداد Handlerها (شامل Middlewareها و Handler نهایی)
 	handlersCount := len(handlers)
 
 	// ایجاد خروجی لاگ شده
@@ -129,14 +129,12 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	handlers, params := root.find(req.URL.Path)
 
 	if handlers != nil {
-		// 3. Create Context
-		c := NewContext(w, req)
+		// 3. Create Context with the full chain of handlers
+		c := NewContext(w, req, handlers)
 		c.Params = params
 
-		// 4. Execute Handlers (simplified: only execute the last one for now)
-		if len(handlers) > 0 {
-			handlers[len(handlers)-1](c)
-		}
+		// 4. Start the execution of the handlers chain
+		c.Next()
 
 	} else {
 		// 5. No route found
@@ -175,10 +173,13 @@ func formatRoutePrint(method, path string, handlers int) string {
 	}
 
 	// [Time] [Method] [Path] (Handlers Count)
+	// از پکیج log برای گرفتن زمان استفاده می‌کنیم تا خروجی کامل باشد.
+	timeStr := log.Prefix()
+
 	return fmt.Sprintf(
-		"%s%s %-6s%s %s%s %s(%d handlers)%s",
-		reset, // reset for time
-		yellow,
+		"%s %s%s %-6s%s %s%s %s(%d handlers)%s",
+		timeStr, // زمان فعلی از Log Prefix
+		methodColor,
 		strings.ToUpper(method),
 		reset,
 		methodColor,
