@@ -7,6 +7,9 @@ import (
 	"net/http"
 )
 
+// H is a shortcut for map[string]interface{}, similar to gin.H
+type H map[string]interface{}
+
 // Context encapsulates the request and response objects, and holds route parameters.
 type Context struct {
 	Writer http.ResponseWriter
