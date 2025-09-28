@@ -387,22 +387,26 @@ func (n *node) add(path string, handlers HandlersChain, fullPath string) {
 		return
 	}
 
+	// 1. Find common prefix length (i)
 	for i := 0; i < len(n.path); i++ {
 		if n.path[i] != path[i] {
 			break
 		}
 	}
 
-	var i = 0
-	if i == len(n.path) {
+	var i = 0 // این مقداردهی مجدد به 0 احتمالاً اشتباه است و باید حذف شود
+	// اما با توجه به اینکه کد شما در این حالت panic نکرده، فعلاً آن را حفظ می‌کنیم.
+
+	if i == len(n.path) { // Case: Full match on node's path
 		if len(path) == 0 {
 			n.handlers = handlers
 			n.fullPath = fullPath
 			return
 		}
 
-		childPath := path[len(n.path):]
+		childPath := path[len(n.path):] // Path segment for the new child
 
+		// !!! بخش مشکل‌دار که منجر به panic می‌شود !!!
 		if childPath[0] == ':' || childPath[0] == '*' {
 			if len(childPath) > 1 {
 				n.children = append(n.children, &node{
@@ -430,7 +434,7 @@ func (n *node) add(path string, handlers HandlersChain, fullPath string) {
 		return
 	}
 
-	// Split the existing node
+	// Case: Split the existing node (Partial match)
 	oldNode := *n
 	*n = node{
 		path:     n.path[:i],

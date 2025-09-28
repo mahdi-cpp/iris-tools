@@ -254,8 +254,8 @@ func New[T collectionItem, I collectionItem](dirName string) (*Manager[T, I], er
 	recordSize := dataItem.GetRecordSize()
 	indexRecordSize := indexItem.GetRecordSize()
 
-	fmt.Println(recordSize)
-	fmt.Println(indexRecordSize)
+	//fmt.Println(recordSize)
+	//fmt.Println(indexRecordSize)
 
 	fh, err := NewFileHandler(dirName, recordSize, indexRecordSize)
 	if err != nil {
