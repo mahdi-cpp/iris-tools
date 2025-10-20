@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"strconv"
 )
 
 // H is a shortcut for map[string]interface{}, similar to gin.H
@@ -117,4 +118,41 @@ func (c *Context) Data(code int, contentType string, data []byte) {
 	c.Writer.Header().Set("Content-Type", contentType)
 	c.Status(code)
 	c.Writer.Write(data)
+}
+
+
+
+// --- توابع خواندن Query (Query Reading Helpers) ---
+
+// GetQuery returns the query value (string) for the given key from the URL.
+func (c *Context) GetQuery(key string) string {
+	return c.Req.URL.Query().Get(key)
+}
+
+// GetQueryInt returns the query value as int for the given key, returning an error if conversion fails.
+func (c *Context) GetQueryInt(key string) (int, error) {
+	valueStr := c.GetQuery(key)
+	if valueStr == "" {
+		return 0, fmt.Errorf("query parameter '%s' not found", key)
+	}
+	return strconv.Atoi(valueStr)
+}
+
+// GetQueryIntDefault returns the query value as int for the given key with a default value.
+func (c *Context) GetQueryIntDefault(key string, defaultValue int) int {
+	if value, err := c.GetQueryInt(key); err == nil {
+		return value
+	}
+	return defaultValue
+}
+
+// GetQueryBool returns the query value as boolean for the given key.
+func (c *Context) GetQueryBool(key string) bool {
+	valueStr := c.GetQuery(key)
+	// Common standard bool parsing ("true", "1", "t", etc.)
+	if valueStr == "" {
+		return false
+	}
+	b, _ := strconv.ParseBool(valueStr)
+	return b
 }
