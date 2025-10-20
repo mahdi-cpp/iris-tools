@@ -408,7 +408,7 @@ func (m *Manager[T]) Copy(item T) (T, error) {
 		return zero, fmt.Errorf("error writing record to disk: %w", err)
 	}
 
-	m.dataCache[id] = item
+	m.dataCache[item.GetID()] = item
 
 	return item, nil
 }
