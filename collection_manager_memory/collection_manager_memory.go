@@ -164,7 +164,26 @@ type Manager[T CollectionItem] struct {
 	closed    bool
 }
 
-// New Manager را با خواندن تمام داده‌ها از فایل و کش کردن آنها در رم مقداردهی می‌کند.
+func NewWithRecordSize[T CollectionItem](dirName string, fileName string, recordSize int) (*Manager[T], error) {
+
+	fh, err := NewFileHandler(dirName, fileName, recordSize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file handler: %w", err)
+	}
+
+	manager := &Manager[T]{
+		fh:        fh,
+		dataCache: make(map[uuid.UUID]T),
+	}
+
+	// لود کردن تمام داده‌ها در زمان شروع
+	if err := manager.loadAllDataToCache(); err != nil {
+		return nil, fmt.Errorf("failed to load data to cache: %w", err)
+	}
+
+	return manager, nil
+}
+
 func New[T CollectionItem](dirName string, fileName string) (*Manager[T], error) {
 	var dataItem T
 	recordSize := dataItem.GetRecordSize()
