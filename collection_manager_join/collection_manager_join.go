@@ -418,39 +418,3 @@ func (m *Manager[T]) GetByParentID(parentID uuid.UUID) ([]T, error) {
 
 	return items, nil
 }
-
-func (m *Manager[T]) Clone(item T) (T, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	var zero T
-	if m.closed {
-		return zero, fmt.Errorf("manager is closed")
-	}
-
-	key := item.GetCompositeKey()
-	if _, ok := m.dataCache[key]; ok {
-		return zero, fmt.Errorf("item with key %s already exists", key)
-	}
-
-	data, err := json.Marshal(item)
-	if err != nil {
-		return zero, fmt.Errorf("error marshaling item: %w", err)
-	}
-
-	_, err = m.fh.WriteRecord(data)
-	if err != nil {
-		return zero, fmt.Errorf("error writing record to disk: %w", err)
-	}
-
-	m.dataCache[key] = item
-
-	// به‌روزرسانی کش والد
-	keyParts := strings.Split(key, ":")
-	if len(keyParts) > 0 {
-		parentID := keyParts[0]
-		m.parentCache[parentID] = append(m.parentCache[parentID], item)
-	}
-
-	return item, nil
-}

@@ -388,3 +388,27 @@ func (m *Manager[T]) findRecordOffset(id uuid.UUID) (int64, error) {
 
 	return -1, fmt.Errorf("item with ID %s not found", id)
 }
+
+func (m *Manager[T]) Copy(item T) (T, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var zero T
+	if m.closed {
+		return zero, fmt.Errorf("manager is closed")
+	}
+
+	data, err := json.Marshal(item)
+	if err != nil {
+		return zero, fmt.Errorf("error marshaling item: %w", err)
+	}
+
+	_, err = m.fh.WriteRecord(data)
+	if err != nil {
+		return zero, fmt.Errorf("error writing record to disk: %w", err)
+	}
+
+	m.dataCache[id] = item
+
+	return item, nil
+}
