@@ -2,7 +2,6 @@ package mygin
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -47,9 +46,30 @@ func (group *RouterGroup) Use(middleware ...HandlerFunc) {
 	group.Handlers = append(group.Handlers, middleware...)
 }
 
-// calculateAbsolutePath resolves the absolute path for a relative path.
 func (group *RouterGroup) calculateAbsolutePath(relativePath string) string {
-	return group.basePath + relativePath
+	// حذف اسلش‌های تکراری
+	if relativePath == "" {
+		return group.basePath
+	}
+
+	finalPath := group.basePath
+	if finalPath == "/" {
+		finalPath = ""
+	}
+
+	// اطمینان از اینکه relativePath با اسلش شروع می‌شود
+	if relativePath[0] != '/' {
+		finalPath += "/" + relativePath
+	} else {
+		finalPath += relativePath
+	}
+
+	// حذف اسلش انتهایی اگر وجود دارد (به جز برای مسیر ریشه)
+	if len(finalPath) > 1 && finalPath[len(finalPath)-1] == '/' {
+		finalPath = finalPath[:len(finalPath)-1]
+	}
+
+	return finalPath
 }
 
 // combineHandlers copies and appends handlers.
@@ -88,7 +108,6 @@ func (group *RouterGroup) handle(httpMethod, relativePath string, handlers Handl
 	group.engine.addRoute(httpMethod, absolutePath, handlers)
 }
 
-// addRoute adds a route to the engine's Radix Tree and logs the registration.
 func (engine *Engine) addRoute(method, path string, handlers HandlersChain) {
 	if method == "" {
 		panic("method must not be empty")
@@ -97,54 +116,53 @@ func (engine *Engine) addRoute(method, path string, handlers HandlersChain) {
 		panic("path must begin with '/'")
 	}
 
-	if engine.router[method] == nil {
-		// Initialize the root node for this method
-		engine.router[method] = &node{fullPath: "/"}
+	// نرمال‌سازی مسیر
+	if path != "/" && path[len(path)-1] == '/' {
+		path = path[:len(path)-1]
 	}
-	engine.router[method].addRoute(path, handlers)
 
-	// =========================================================
-	// 💡 به‌روزرسانی برای نمایش مسیر در ترمینال (مشابه Gin)
-	// =========================================================
+	if engine.router[method] == nil {
+		engine.router[method] = &node{path: "/"}
+	}
 
+	// اگر مسیر ریشه است
+	if path == "/" {
+		engine.router[method].handlers = handlers
+		engine.router[method].fullPath = "/"
+	} else {
+		engine.router[method].add(path, handlers, path)
+	}
+
+	// Logging
 	handlersCount := len(handlers)
-
-	// ایجاد خروجی لاگ شده
 	logString := formatRoutePrint(method, path, handlersCount)
-
-	// چاپ در ترمینال
 	fmt.Println(logString)
 }
 
-// ServeHTTP implements the http.Handler interface (required by http.ListenAndServe).
+// ServeHTTP implements the http.Handler interface.
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// 1. Find the root node for the method
+
 	root := engine.router[req.Method]
 	if root == nil {
 		http.NotFound(w, req)
 		return
 	}
 
-	// 2. Find the route and parameters
 	handlers, params := root.find(req.URL.Path)
 
 	if handlers != nil {
-		// 3. Create Context with the full chain of handlers
+		// 1. Context را با زنجیره کامل Handlers ایجاد کنید
 		c := NewContext(w, req, handlers)
 		c.Params = params
 
-		// 4. Start the execution of the handlers chain
+		// 2. اجرای زنجیره را شروع کنید
 		c.Next()
 
 	} else {
-		// 5. No route found
+		// مسیر پیدا نشد
 		http.NotFound(w, req)
 	}
 }
-
-// =========================================================
-// تابع کمکی برای فرمت‌دهی خروجی (به سبک Gin)
-// =========================================================
 
 // formatRoutePrint formats the route information for printing in the terminal.
 func formatRoutePrint(method, path string, handlers int) string {
@@ -155,6 +173,8 @@ func formatRoutePrint(method, path string, handlers int) string {
 		green   = "\033[32m"
 		blue    = "\033[34m"
 		magenta = "\033[35m"
+		// استفاده از رنگ‌های روشن برای نمایش متدها
+		lightBlue = "\033[94m"
 	)
 
 	// تعیین رنگ بر اساس متد HTTP
@@ -164,7 +184,7 @@ func formatRoutePrint(method, path string, handlers int) string {
 		methodColor = blue
 	case http.MethodPost:
 		methodColor = green
-	case http.MethodPut:
+	case http.MethodPut, http.MethodPatch:
 		methodColor = yellow
 	case http.MethodDelete:
 		methodColor = magenta
@@ -172,20 +192,19 @@ func formatRoutePrint(method, path string, handlers int) string {
 		methodColor = reset
 	}
 
-	// [Time] [Method] [Path] (Handlers Count)
-	// از پکیج log برای گرفتن زمان استفاده می‌کنیم تا خروجی کامل باشد.
-	timeStr := log.Prefix()
+	// 💡 رفع مشکل نمایش: استفاده از log.Printf برای زمان‌بندی و استفاده از Sprintf برای بخش متد و مسیر
+	// خروجی را به این صورت تغییر می‌دهیم تا با لاگ پیش‌فرض سیستم تداخل نداشته باشد:
 
 	return fmt.Sprintf(
-		"%s %s%s %-6s%s %s%s %s(%d handlers)%s",
-		timeStr, // زمان فعلی از Log Prefix
+		"%s%-6s%s %s%s %s(%d handlers)%s",
 		methodColor,
 		strings.ToUpper(method),
 		reset,
-		methodColor,
+		lightBlue, // رنگ مسیر
 		path,
 		reset,
 		handlers,
 		reset,
 	)
+	// نکته: برای جلوگیری از تداخل با log.Fatal، دیگر زمان را مستقیماً در اینجا چاپ نمی‌کنیم.
 }

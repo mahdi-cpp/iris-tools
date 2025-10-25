@@ -15,134 +15,181 @@ func (n *node) addRoute(path string, handlers HandlersChain) {
 	n.add(path, handlers, path)
 }
 
-// add adds a new route to the tree.
 func (n *node) add(path string, handlers HandlersChain, fullPath string) {
+	// نرمال‌سازی مسیر: حذف اسلش انتهایی به جز برای ریشه
+	if len(path) > 1 && path[len(path)-1] == '/' {
+		path = path[:len(path)-1]
+	}
 
-	// 💡 رفع مشکل: اگر دیگر مسیری برای افزودن نمانده است، Handler را تنظیم و بازگردانید.
-	if len(path) == 0 {
+	n.addRecursive(path, handlers, fullPath)
+}
+
+func (n *node) addRecursive(path string, handlers HandlersChain, fullPath string) {
+	// اگر مسیر خالی باشد، هندلرها را تنظیم کن
+	if path == "" {
 		n.handlers = handlers
 		n.fullPath = fullPath
 		return
 	}
 
-	// 1. Find common prefix length (i)
-	var i int
-	maxLen := len(n.path)
-	if len(path) < maxLen {
-		maxLen = len(path)
+	// پیدا کردن طول پیشوند مشترک
+	i := 0
+	maxLen := min(len(n.path), len(path))
+	for i < maxLen && n.path[i] == path[i] {
+		i++
 	}
 
-	for i = 0; i < maxLen; i++ {
-		if n.path[i] != path[i] {
-			break
+	// اگر پیشوند مشترک کمتر از طول مسیر گره فعلی باشد، گره را تقسیم کن
+	if i < len(n.path) {
+		// تقسیم گره
+		child := &node{
+			path:      n.path[i:],
+			children:  n.children,
+			handlers:  n.handlers,
+			fullPath:  n.fullPath,
+			isParam:   n.isParam,
+			paramName: n.paramName,
 		}
+
+		n.path = n.path[:i]
+		n.children = []*node{child}
+		n.handlers = nil
+		n.fullPath = ""
+		n.isParam = false
+		n.paramName = ""
 	}
 
-	if i == len(n.path) { // Case 1: Full match on node's path (e.g., node="/api", path="/api/users")
+	// مسیر باقی‌مانده
+	remainingPath := path[i:]
 
-		if len(path) == len(n.path) { // Route path ends exactly here (e.g., node="/api", path="/api")
-			n.handlers = handlers
-			n.fullPath = fullPath
-			return
-		}
-
-		childPath := path[len(n.path):] // Remaining path for the child (e.g., "/users")
-
-		// Check for dynamic parameters ('*' or ':') - must be checked before looking at children
-		if childPath[0] == ':' || childPath[0] == '*' {
-			// If a param node already exists, panic or handle conflict (simplified: just add/overwrite if it's the only segment)
-			if len(n.children) > 0 && n.children[0].isParam {
-				// Simple router often only allows one param node as the first child
-				n.children[0].add(childPath, handlers, fullPath)
-				return
-			}
-
-			paramNode := &node{
-				path:      childPath,
-				handlers:  handlers,
-				fullPath:  fullPath,
-				isParam:   true,
-				paramName: childPath[1:]}
-
-			// Add as the first child to prioritize parameter matching
-			n.children = append([]*node{paramNode}, n.children...)
-			return
-		}
-
-		// Find a matching child by the first character of the remaining path
-		for _, child := range n.children {
-			if !child.isParam && len(childPath) > 0 && child.path[0] == childPath[0] {
-				child.add(childPath, handlers, fullPath)
-				return
-			}
-		}
-
-		// No matching child, create a new one
-		newNode := &node{path: childPath, handlers: handlers, fullPath: fullPath}
-		n.children = append(n.children, newNode)
+	// اگر مسیر باقی‌مانده خالی باشد، هندلرها را تنظیم کن
+	if remainingPath == "" {
+		n.handlers = handlers
+		n.fullPath = fullPath
 		return
+	}
 
-	} else { // Case 2: Partial match (Split the existing node)
-		// Create a new parent node
-		oldNode := *n
-
-		// Update the current node (n) to be the common prefix
-		*n = node{
-			path:     oldNode.path[:i],
-			children: make([]*node, 0, 2),
+	// بررسی برای پارامتر
+	if remainingPath[0] == ':' {
+		// پیدا کردن نام پارامتر
+		end := 1
+		for end < len(remainingPath) && remainingPath[end] != '/' {
+			end++
 		}
 
-		// Update the old node's path
-		oldNode.path = oldNode.path[i:]
+		paramName := remainingPath[1:end]
+		remainingAfterParam := remainingPath[end:]
 
-		// Create the new node for the remaining path
-		newNode := &node{path: path[i:], handlers: handlers, fullPath: fullPath}
+		// بررسی آیا گره پارامتری با همین نام وجود دارد
+		for _, child := range n.children {
+			if child.isParam && child.paramName == paramName {
+				child.addRecursive(remainingAfterParam, handlers, fullPath)
+				return
+			}
+		}
 
-		// Add the old node and the new node as children to the new parent (n)
-		n.children = append(n.children, &oldNode, newNode)
+		// ایجاد گره پارامتری جدید
+		paramNode := &node{
+			path:      remainingPath[:end],
+			isParam:   true,
+			paramName: paramName,
+		}
+
+		n.children = append(n.children, paramNode)
+		paramNode.addRecursive(remainingAfterParam, handlers, fullPath)
+		return
 	}
+
+	// برای مسیرهای ثابت، فرزند موجود را پیدا کن یا ایجاد کن
+	for _, child := range n.children {
+		if !child.isParam && child.path != "" && child.path[0] == remainingPath[0] {
+			child.addRecursive(remainingPath, handlers, fullPath)
+			return
+		}
+	}
+
+	// ایجاد گره جدید
+	newNode := &node{
+		path: remainingPath,
+	}
+	n.children = append(n.children, newNode)
+	newNode.addRecursive("", handlers, fullPath)
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // find attempts to find a matching route in the tree.
 func (n *node) find(path string) (HandlersChain, map[string]string) {
-	if len(path) == 0 {
-		if n.handlers != nil {
-			return n.handlers, nil
-		}
-		return nil, nil
-	}
+	return n.findRecursive(path, make(map[string]string))
+}
 
-	// 1. Check current node path match
+func (n *node) findRecursive(path string, params map[string]string) (HandlersChain, map[string]string) {
+	// اگر مسیر جاری با پیشوند مسیر هدف منطبق باشد
 	if len(path) >= len(n.path) && path[:len(n.path)] == n.path {
-		path = path[len(n.path):]
+		remainingPath := path[len(n.path):]
 
-		// Route found exactly at this node
-		if len(path) == 0 {
-			return n.handlers, nil
+		// اگر مسیر دقیقاً تمام شده باشد
+		if remainingPath == "" {
+			if n.handlers != nil {
+				return n.handlers, params
+			}
+			return nil, nil
 		}
 
-		// 2. Search children
+		// ابتدا فرزندان ثابت را بررسی کن
 		for _, child := range n.children {
-			if !child.isParam && len(path) > 0 && child.path[0] == path[0] {
-				// Recursive search on static child
-				return child.find(path)
+			if !child.isParam {
+				if handlers, foundParams := child.findRecursive(remainingPath, cloneParams(params)); handlers != nil {
+					return handlers, foundParams
+				}
 			}
 		}
 
-		// 3. Search parameter children (if any)
+		// سپس فرزندان پارامتری را بررسی کن
 		for _, child := range n.children {
 			if child.isParam {
-				// For simple routers, treat the rest of the path as the param value
-				if len(path) > 0 {
-					params := make(map[string]string)
+				// پیدا کردن انتهای بخش پارامتر
+				end := 0
+				for end < len(remainingPath) && remainingPath[end] != '/' {
+					end++
+				}
 
-					// Simplified: assume the entire remaining path is the parameter value
-					params[child.paramName] = path
-					return child.handlers, params
+				if end > 0 {
+					paramValue := remainingPath[:end]
+					newParams := cloneParams(params)
+					newParams[child.paramName] = paramValue
+
+					// اگر پارامتر تمام مسیر باقی‌مانده را پوشش دهد
+					if end == len(remainingPath) {
+						if child.handlers != nil {
+							return child.handlers, newParams
+						}
+					} else {
+						// اگر مسیر بیشتری باقی مانده، در فرزندان جستجو کن
+						nextPath := remainingPath[end:]
+						for _, grandChild := range child.children {
+							if handlers, foundParams := grandChild.findRecursive(nextPath, newParams); handlers != nil {
+								return handlers, foundParams
+							}
+						}
+					}
 				}
 			}
 		}
 	}
 
-	return nil, nil // No match found
+	return nil, nil
+}
+
+func cloneParams(params map[string]string) map[string]string {
+	newParams := make(map[string]string)
+	for k, v := range params {
+		newParams[k] = v
+	}
+	return newParams
 }
